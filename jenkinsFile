@@ -1,0 +1,109 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_REGISTRY = 'your-docker-registry' // Replace with your Docker registry
+        DOCKER_IMAGE = 'awesome-web-app'
+        SONARQUBE_HOST = 'http://localhost:9000' // Replace with your SonarQube server URL
+        SONARQUBE_TOKEN = 'your_sonar_token' // Replace with your SonarQube authentication token
+        DATADOG_API_KEY = 'your_datadog_api_key' // Replace with your Datadog API key
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    echo 'Building the project...'
+                    // Actual build command for a Maven project
+                    sh 'mvn clean package'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    echo 'Running tests...'
+                    // Actual test command for a Maven project
+                    sh 'mvn test'
+                }
+            }
+        }
+
+        stage('Code Quality Analysis') {
+            steps {
+                script {
+                    echo 'Running code quality analysis...'
+                    // Actual SonarQube analysis command for a Maven project
+                    sh """
+                        mvn sonar:sonar \
+                        -Dsonar.projectKey=awesome-web-app \
+                        -Dsonar.host.url=${SONARQUBE_HOST} \
+                        -Dsonar.login=${SONARQUBE_TOKEN}
+                    """
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying the application...'
+                    // Build Docker image and push to Docker registry
+                    sh """
+                        docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest .
+                        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
+                    """
+                    // Deploy the application using Docker Compose
+                    sh 'docker-compose up -d'
+                }
+            }
+        }
+
+        stage('Release') {
+            steps {
+                script {
+                    echo 'Releasing the application...'
+                    // Tag and push the Docker image for release
+                    sh """
+                        docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:release
+                        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:release
+                    """
+                }
+            }
+        }
+
+        stage('Monitoring and Alerting') {
+            steps {
+                script {
+                    echo 'Setting up monitoring and alerting...'
+                    // Example command to validate Datadog agent configuration (requires Datadog agent to be installed)
+                    sh """
+                        curl -X POST -H "Content-type: application/json" \
+                        -d '{
+                                "title": "Jenkins Pipeline Completed",
+                                "text": "The Jenkins pipeline for Awesome Web App has completed successfully.",
+                                "priority": "normal",
+                                "tags": ["jenkins:pipeline", "project:awesome-web-app"],
+                                "alert_type": "info"
+                            }' \
+                        "https://api.datadoghq.com/api/v1/events?api_key=${DATADOG_API_KEY}"
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            script {
+                echo 'Pipeline completed successfully.'
+            }
+        }
+        failure {
+            script {
+                echo 'Pipeline failed.'
+            }
+        }
+    }
+}
